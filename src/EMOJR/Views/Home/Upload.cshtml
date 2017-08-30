@@ -1,0 +1,316 @@
+﻿<html>
+<head>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+    <script src='https://code.responsivevoice.org/responsivevoice.js'></script>
+</head>
+
+<body>
+    <div class="row">
+        <div class="col-sm-6">
+            <label class="btn btn-default btn-file">
+                Choose Image
+                <input type='file' accept="image/*" onchange="loadImage(event)" id="filename" name="filename" class="hidden" />
+            </label>
+            <br />
+            <img id="emotionIMG" style="width:100%;" />
+        </div>
+        <div class="col-sm-6">
+            <button id="btn" class="btn btn-primary" onclick="resetValues()">Emojify</button>
+            <br />
+            <canvas id="myCanvas" style="width:100%;" ></canvas>
+        </div>
+        <div class="col-sm-12">
+            <p id="response">Let's see what emotions you have!</p>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Project Oxford Emotion API key
+        var apiKey = "4af70ba6f3f14ea7891543204e3c82c4";
+
+        // The base URL for the API
+        var apiUrl = "https://api.projectoxford.ai/emotion/v1.0/recognize";
+
+        // Global variables
+        var requestInProgress = false;
+        var isPaused = false;
+        var faceList = {}; // create an empty array for the face emoji list
+        var addpair = function (my_key, my_value) {
+            faceList[my_key] = my_value;
+        }
+        var getvalue = function (my_key) {
+            return faceList[my_key];
+        }
+        
+        var emotionsDetected = {}; //keeps track of the emotions detected and their counts
+        var addpair2 = function (my_key) {
+            emotionsDetected[my_key] = 1;
+        }
+        var getvalue2 = function (my_key) {
+            return emotionsDetected[my_key];
+        }
+        var updatepair2 = function (my_key) {
+            emotionsDetected[my_key] += 1;
+        }
+        var gethigher = function () { //gets the highest count emotion
+            var highest = 0;
+            var mostEmotion = "";
+            for (var emotion in emotionsDetected) {
+                if (highest < emotionsDetected[emotion]) {
+                    mostEmotion = emotion;
+
+                }
+
+            }
+            return mostEmotion;
+        }
+
+        addpair("Angry", ["😡", "😠"])
+        addpair("Contemptful", ["😤"])
+        addpair("Disgusted", ["😷", "🤐"])
+        addpair("Afraid", ["😱"])
+        addpair("Happy", ["😝", "😀", "😃", "😄", "😆", "😊", "🙂"])
+        addpair("Neutral", ["😶", "😐", "😑"])
+        addpair("Sad", ["🙁", "😞", "😟", "😔", "😢", "😭"])
+        addpair("Surprised", ["😳", "😮", "😲"])
+
+        var Painter = (function () {
+
+            var context = null;
+
+            return {
+                init: function (ctx) {
+                    context = ctx;
+                },
+
+				// This function takes the uploaded image file and creates a 
+				// canvas with that image to draw the emojis on to.
+                loadCanvas: function () {
+                    var file = document.getElementById('filename').files[0];
+
+                    var input        = event.target;
+                    var reader       = new FileReader();
+                    reader.onload    = function () {
+                        var dataURL  = reader.result;
+                        var imageObj = new Image();
+
+                        imageObj.src = dataURL;
+                        imageObj.onload = function () {
+                            var imgWidth          = imageObj.naturalWidth;
+                            var imgHeight         = imageObj.naturalHeight;
+                            context.canvas.width  = imgWidth;
+                            context.canvas.height = imgHeight;
+                            context.drawImage(imageObj, 0, 0, imgWidth, imgHeight);
+
+                        }
+                    }//this ensures that the uploaded file is fully loaded 
+					//before it is used by the file reader to draw the canvas
+                    reader.readAsDataURL(file);
+                },
+
+				// This function draws the emoji as a text onto the canvas of 
+				// the uploaded image.
+                addEmoji: function (top, left, width, height, currentEmotion) {
+                    var emojiWidth;
+                    var fontsize = 5;
+					//grab the number of usable emojis for this emotion
+                    var emojiCount = faceList[currentEmotion].length;
+					//randomly select one of the emojis
+                    var randomEmoji = Math.floor(Math.random() * emojiCount)
+                    var xPos, yPos;
+
+					//adjust the emoji font size according to the detected 
+					//face's size
+                    do {
+                        context.font = fontsize + 'px Arial';
+                        emojiWidth = context.measureText(faceList[currentEmotion][randomEmoji]).width;
+                        fontsize += 5;
+                    } while (emojiWidth < width)
+
+					//position the emoji in the middle of the detected face
+                    fontsize -= 5;
+                    if (fontsize > 225) {
+                        fontsize = 225;
+                        xPos = parseInt(left) + parseInt(width) / 5;
+                        yPos = parseInt(top) + parseInt(height) / 1.5;
+                    } else {
+                        xPos = parseInt(left) - 2;
+                        yPos = parseInt(top) + parseInt(height) - 10;
+                    }
+                    context.font = fontsize + 'px serif';
+					//draw the emoji on the image canvas
+                    context.fillText(faceList[currentEmotion][randomEmoji], xPos, yPos);
+                }
+            }
+
+        })();
+
+        // Load the image
+        var loadImage = function (event) {
+            var output = document.getElementById('emotionIMG');
+            output.src = URL.createObjectURL(event.target.files[0]);
+        };
+
+        // Checks if a request has already been sent; if not, loads uploaded 
+		// image into a canvas and calls the API
+        function resetValues() {
+            if (!requestInProgress) {
+                requestInProgress = true;
+
+                emotionsDetected = {};
+
+                var file = document.getElementById('filename').files[0];
+
+                Painter.init(document.getElementById("myCanvas").getContext("2d"));
+                Painter.loadCanvas();
+
+                CallAPI(file, apiUrl, apiKey);
+
+            }
+        }
+
+		// Calls the API via a AJAX POST request, once API call returns 
+		// proccesses the result.
+        function CallAPI(file, apiUrl, apiKey) {
+            $.ajax({
+                url: apiUrl,
+                beforeSend: function (xhrObj) {
+                    xhrObj.setRequestHeader("Content-Type", "application/octet-stream");
+                    xhrObj.setRequestHeader("Ocp-Apim-Subscription-Key", apiKey);
+                },
+                type: "POST",
+                data: file,
+                processData: false
+            })
+            .done(function (response) {
+                ProcessResult(response);
+            })
+            .fail(function (error) {
+                $("#response").text(error.getAllResponseHeaders());
+            });
+        }
+
+		// Using the resulting AJAX response, add the detected faces' emotions 
+		// one by one and then state the majority/only emotion in the image.
+        function ProcessResult(response)
+        {
+            for (i = 0; i < response.length; i++) {
+
+                //current detected face's location in image
+                var top    = JSON.stringify(response[i].faceRectangle.top);
+                var left   = JSON.stringify(response[i].faceRectangle.left);
+                var width  = JSON.stringify(response[i].faceRectangle.width);
+                var height = JSON.stringify(response[i].faceRectangle.height);
+                
+                //most likely emotion (result is presorted)
+                var currentEmotion = findEmotion(response, i);
+                if (getvalue2(currentEmotion) == null) {
+                    addpair2(currentEmotion);
+                } else {
+                    updatepair2(currentEmotion);
+                }
+
+				//draws the emoji 
+                Painter.addEmoji(top, left, width, height, currentEmotion);
+            }
+            //print out a statement of the mojority emotion from the image
+            listEmotions();
+
+        }
+
+		// Using the tracked count of the emotions detected in the uploaded 
+		// image, display a suitable message stating which emotion it is, 
+		// then free the requestInProgress booleon so that another image 
+		// can be uploaded.
+        function listEmotions() {
+            var listInString = "";
+
+            for (var key in emotionsDetected) {
+
+                listInString += key + " (" + getvalue2(key) + ") ";
+            }
+
+            var highest = gethigher();
+            var count = Object.keys(emotionsDetected).length;
+
+            document.getElementById('response').innerHTML = '';
+            if (count > 1) {
+                responsiveVoice.speak("The people in this image are mostly " + highest);
+                document.getElementById('response').innerHTML = listInString;
+            } else if (count == 1 && emotionsDetected[highest] > 1) {
+                responsiveVoice.speak("The people in this image are " + highest);
+                document.getElementById('response').innerHTML = listInString;
+            } else if (count == 1 && emotionsDetected[highest] == 1) {
+                responsiveVoice.speak("The person in this image is " + highest);
+                document.getElementById('response').innerHTML = listInString;
+            } else if (count < 1) {
+                responsiveVoice.speak("There is no face detected");
+                document.getElementById('response').innerHTML = "No face detected";
+            }
+            requestInProgress = false;
+
+        }
+
+		// Finds the highest score emotion from the API response for the 
+		// specifieid facee index 'i' and return the face's emotion.
+        function findEmotion(response, i) {
+            //current mood scores detected
+            var anger     = JSON.stringify(response[i].scores.anger);
+            var contempt  = JSON.stringify(response[i].scores.contempt);
+            var disgust   = JSON.stringify(response[i].scores.disgust);
+            var fear      = JSON.stringify(response[i].scores.fear);
+            var happiness = JSON.stringify(response[i].scores.happiness);
+            var neutral   = JSON.stringify(response[i].scores.neutral);
+            var sadness   = JSON.stringify(response[i].scores.sadness);
+            var surprise  = JSON.stringify(response[i].scores.surprise);
+
+			//depending on the highest score emotion, return the current 
+			//face's mood
+            var highestScore = 0;
+            var currentMood = ""
+            if (parseFloat(anger) > highestScore) {
+                highestScore = parseFloat(anger);
+                currentMood = "Angry";
+            }
+
+            if (parseFloat(contempt) > highestScore) {
+                highestScore = parseFloat(contempt);
+                currentMood = "Contemptful";
+            }
+
+            if (parseFloat(disgust) > highestScore) {
+                highestScore = parseFloat(disgust);
+                currentMood = "Disgusted";
+            }
+
+            if (parseFloat(fear) > highestScore) {
+                highestScore = parseFloat(fear);
+                currentMood = "Afraid";
+            }
+
+            if (parseFloat(happiness) > highestScore) {
+                highestScore = parseFloat(happiness);
+                currentMood = "Happy";
+            }
+
+            if (parseFloat(neutral) > highestScore) {
+                highestScore = parseFloat(neutral);
+                currentMood = "Neutral";
+            }
+
+            if (parseFloat(sadness) > highestScore) {
+                highestScore = parseFloat(sadness);
+                currentMood = "Sad";
+            }
+
+            if (parseFloat(surprise) > highestScore) {
+                highestScore = parseFloat(surprise);
+                currentMood = "Surprised";
+            }
+
+            return currentMood;
+        }
+    </script>
+</body>
+
+</html>

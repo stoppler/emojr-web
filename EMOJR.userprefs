@@ -1,0 +1,15 @@
+﻿<Properties StartupConfiguration="{AC0E6856-2C52-436B-88F6-F5A099529DA2}|Default">
+  <MonoDevelop.Ide.Workbench ActiveDocument="src/EMOJR/Views/Home/Upload.cshtml">
+    <Files>
+      <File FileName="src/EMOJR/Controllers/HomeController.cs" Line="55" Column="37" />
+      <File FileName="src/EMOJR/Views/Home/Upload.cshtml" Line="202" Column="28" />
+    </Files>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+  <MonoDevelop.Ide.ItemProperties.src.EMOJR PreferredExecutionTarget="MonoDevelop.Default" />
+  <MultiItemStartupConfigurations />
+</Properties>

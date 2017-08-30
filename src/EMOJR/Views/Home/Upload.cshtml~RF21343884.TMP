@@ -1,0 +1,236 @@
+﻿<html>
+<head>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.9.0/jquery.min.js"></script>
+</head>
+
+<body>
+    <div class="row">
+        <div class="col-sm-6">
+            <label class="btn btn-default btn-file">
+                Choose Image
+                <input type='file' accept="image/*" onchange="loadImage(event)" id="filename" name="filename" class="hidden" />
+            </label>
+            <br />
+            <img id="emotionIMG" />
+        </div>
+        <div class="col-sm-6">
+            <button id="btn" class="btn btn-primary">Emojify</button>
+            <br />
+            <canvas id="myCanvas" />
+            <p id="response">hello!</p>
+
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Project Oxford Emotion API key
+        var apiKey = "4af70ba6f3f14ea7891543204e3c82c4";
+
+        // The base URL for the API
+        var apiUrl = "https://api.projectoxford.ai/emotion/v1.0/recognize";
+
+        // Global variables
+        var faceList = {}; // create an empty array
+        var addpair = function (my_key, my_value) {
+            faceList[my_key] = my_value;
+        }
+        var getvalue = function (my_key) {
+            return faceList[my_key];
+        }
+        
+        var emotionsDetected = {};
+        var addpair2 = function (my_key) {
+            emotionsDetected[my_key] = 1;
+        }
+        var getvalue2 = function (my_key) {
+            return emotionsDetected[my_key];
+        }
+        var updatepair2 = function (my_key) {
+            emotionsDetected[my_key] += 1;
+        }
+
+        addpair("Angry", ["😡", "😠"])
+        addpair("Contemptful", ["😤"])
+        addpair("Disgusted", ["😷", "🤐"])
+        addpair("Afraid", ["😱"])
+        addpair("Happy", ["😝", "😀", "😃", "😄", "😆", "😊", "🙂"])
+        addpair("Neutral", ["😶", "😐", "😑"])
+        addpair("Sad", ["🙁", "😞", "😟", "😔", "😢", "😭"])
+        addpair("Surprised", ["😳", "😮", "😲"])
+
+        var Painter = (function () {
+
+            var context = null;
+
+            return {
+                init: function (ctx) {
+                    context = ctx;
+                },
+
+                loadCanvas: function () {
+                    var file = document.getElementById('filename').files[0];
+
+                    var input = event.target;
+                    var reader = new FileReader();
+                    reader.onload = function () {
+                        var dataURL = reader.result;
+                        var imageObj = new Image();
+
+                        imageObj.src = dataURL;
+                        imageObj.onload = function () {
+                            var imgWidth = imageObj.naturalWidth;
+                            var imgHeight = imageObj.naturalHeight;
+                            context.canvas.width = imgWidth;
+                            context.canvas.height = imgHeight;
+                            context.drawImage(imageObj, 0, 0, imgWidth, imgHeight);
+
+                        }
+                    }
+                    reader.readAsDataURL(file);
+                },
+
+                addEmoji: function (top, left, width, height, currentEmotion) {
+                    //var fontSizes = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200];
+                    var emojiWidth, i = 0;
+                    var fontsize = 5;
+                    var emojiCount = faceList[currentEmotion].length;
+                    var randomEmoji = Math.floor(Math.random() * emojiCount)
+
+                    do {
+                        context.font = fontsize + 'px Arial';
+                        emojiWidth = context.measureText(faceList[currentEmotion][randomEmoji]).width;
+                        fontsize += 5;
+                    } while (emojiWidth < width)
+
+                    fontsize -= 5;
+                    context.font = fontsize + 'px serif';
+                    context.fillText(faceList[currentEmotion][randomEmoji], parseInt(left) - 2, parseInt(top) + parseInt(height) - 10);
+                }
+            }
+
+        })();
+
+        // Load the image
+        var loadImage = function (event) {
+            var output = document.getElementById('emotionIMG');
+            output.src = URL.createObjectURL(event.target.files[0]);
+        };
+
+        $('#btn').click(function () {
+            document.getElementById('response').innerHTML = '';
+            emotionsDetected = {};
+            var file = document.getElementById('filename').files[0];
+
+            Painter.init(document.getElementById("myCanvas").getContext("2d"));
+            Painter.loadCanvas();
+
+            CallAPI(file, apiUrl, apiKey);
+        });
+
+        function CallAPI(file, apiUrl, apiKey) {
+            $.ajax({
+                url: apiUrl,
+                beforeSend: function (xhrObj) {
+                    xhrObj.setRequestHeader("Content-Type", "application/octet-stream");
+                    xhrObj.setRequestHeader("Ocp-Apim-Subscription-Key", apiKey);
+                },
+                type: "POST",
+                data: file,
+                processData: false
+            })
+            .done(function (response) {
+                ProcessResult(response);
+            })
+            .fail(function (error) {
+                $("#response").text(error.getAllResponseHeaders());
+            });
+        }
+
+        function ProcessResult(response)
+        {
+            //document.write(JSON.stringify(response));
+            for (i = 0; i < response.length; i++) {
+                //$("#response").text(JSON.stringify(response[i]));
+
+                //current face detected
+                var top = JSON.stringify(response[i].faceRectangle.top);
+                var left = JSON.stringify(response[i].faceRectangle.left);
+                var width = JSON.stringify(response[i].faceRectangle.width);
+                var height = JSON.stringify(response[i].faceRectangle.height);
+                
+                //highest emotion
+                var currentEmotion = findEmotion(response, i);
+                if (getvalue2(currentEmotion) == null) {
+                    addpair2(currentEmotion);
+                } else {
+                    updatepair2(currentEmotion);
+                }
+
+                Painter.addEmoji(top, left, width, height, currentEmotion);
+            }
+
+            for (var key in emotionsDetected) {
+                var text = document.getElementById('response') = key + " (" + getvalue2(key) + ")";
+            }
+            
+        }
+
+        function findEmotion(response, i) {
+            //current mood scores detected
+            var anger = JSON.stringify(response[i].scores.anger);
+            var contempt = JSON.stringify(response[i].scores.contempt);
+            var disgust = JSON.stringify(response[i].scores.disgust);
+            var fear = JSON.stringify(response[i].scores.fear);
+            var happiness = JSON.stringify(response[i].scores.happiness);
+            var neutral = JSON.stringify(response[i].scores.neutral);
+            var sadness = JSON.stringify(response[i].scores.sadness);
+            var surprise = JSON.stringify(response[i].scores.surprise);
+
+            var highestScore = 0;
+            var currentMood = ""
+            if (parseFloat(anger) > highestScore) {
+                highestScore = parseFloat(anger);
+                currentMood = "Angry";
+            }
+
+            if (parseFloat(contempt) > highestScore) {
+                highestScore = parseFloat(contempt);
+                currentMood = "Contemptful";
+            }
+
+            if (parseFloat(disgust) > highestScore) {
+                highestScore = parseFloat(disgust);
+                currentMood = "Disgusted";
+            }
+
+            if (parseFloat(fear) > highestScore) {
+                highestScore = parseFloat(fear);
+                currentMood = "Afraid";
+            }
+
+            if (parseFloat(happiness) > highestScore) {
+                highestScore = parseFloat(happiness);
+                currentMood = "Happy";
+            }
+
+            if (parseFloat(neutral) > highestScore) {
+                highestScore = parseFloat(neutral);
+                currentMood = "Neutral";
+            }
+
+            if (parseFloat(sadness) > highestScore) {
+                highestScore = parseFloat(sadness);
+                currentMood = "Sad";
+            }
+
+            if (parseFloat(surprise) > highestScore) {
+                highestScore = parseFloat(surprise);
+                currentMood = "Surprised";
+            }
+
+            return currentMood;
+        }
+    </script>
+</body>
+
+</html>
